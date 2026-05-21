@@ -1,0 +1,27 @@
+Windows Registry Editor Version 5.00
+
+; ======================================================
+; Disable Chrome/Chromium/Edge download safety warnings
+; ======================================================
+; Double-click this file -> Yes -> OK -> Restart browser
+; ======================================================
+
+; --- Google Chrome ---
+[HKEY_CURRENT_USER\SOFTWARE\Policies\Google\Chrome]
+"SafeBrowsingProtectionLevel"=dword:00000000
+"DownloadRestrictions"=dword:00000000
+"SafeBrowsingEnabled"=dword:00000000
+
+; --- Chromium (Playwright, Puppeteer, MCP Chrome, etc.) ---
+[HKEY_CURRENT_USER\SOFTWARE\Policies\Chromium]
+"SafeBrowsingEnabled"=dword:00000000
+"SafeBrowsingProtectionLevel"=dword:00000000
+"DownloadRestrictions"=dword:00000000
+"AllowDeletingBrowserHistory"=dword:00000001
+
+; --- Microsoft Edge ---
+[HKEY_CURRENT_USER\SOFTWARE\Policies\Microsoft\Edge]
+"ConfigureDownloadRestrictions"=dword:00000000
+"SmartScreenEnabled"=dword:00000000
+"SmartScreenPuaEnabled"=dword:00000000
+"PreventSmartScreenPromptOverride"=dword:00000000
