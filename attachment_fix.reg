@@ -1,0 +1,16 @@
+Windows Registry Editor Version 5.00
+
+; ======================================================
+; Disable Windows "Open File - Security Warning" dialog
+; ======================================================
+; Double-click this file -> Yes -> OK -> Restart browser
+; ======================================================
+
+; Stop attaching "from Internet" zone markers to new downloads
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Attachments]
+"SaveZoneInformation"=dword:00000001
+
+; Mark common installer/executable types as low risk
+; (covers files that already have zone markers)
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Associations]
+"LowRiskFileTypes"=".exe;.msi;.bat;.cmd;.ps1;.vbs;.reg;.msu;.msix;.appx;.jar;.com;.scr;.msc;.cpl;.hta;.chm;.tmp;.zip;.rar;.7z;.iso;.dmg;.pkg;.apk;.py;.js;.vbe;.wsf;.wsh"
