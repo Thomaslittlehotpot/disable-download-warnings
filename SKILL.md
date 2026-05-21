@@ -1,74 +1,99 @@
 ---
 name: disable-download-warnings
+version: 1.0.0
 description: >
-  Disable Chrome/Chromium download safety warnings and Windows Attachment Manager
-  "Open File - Security Warning" prompts. Covers Google Chrome, Chromium (Playwright,
-  Puppeteer, MCP Chrome), and Microsoft Edge. Works via Windows Registry Group Policy
-  for permanent system-level effect. Use when AI agents get blocked by download
-  interception dialogs, or when users are tired of confirming every downloaded .exe/.msi.
+  Permanently disable Chrome/Chromium/Edge download safety warnings and Windows
+  Attachment Manager "Open File - Security Warning" prompts via registry Group Policy.
+  Covers Google Chrome, Playwright Chromium, Puppeteer Chromium, MCP Chrome, and
+  Microsoft Edge. Works on Windows 10 and 11. No third-party tools required.
+tags:
+  - windows
+  - chrome
+  - chromium
+  - edge
+  - download
+  - security
+  - registry
+  - group-policy
+  - automation
+  - playwright
+  - puppeteer
+  - ai-agent
+  - safe-browsing
+  - smart-screen
+  - attachment-manager
+license: MIT
+author: Thomaslittlehotpot
 ---
-
 # Disable Download Warnings
 
 ## Overview
 
-This skill eliminates two layers of download-blocking prompts on Windows:
+This skill permanently eliminates two independent layers of download-blocking prompts on Windows:
 
-1. **Browser-level**: Chrome/Chromium/Edge "This file may be harmful" / Safe Browsing download warnings
-2. **OS-level**: Windows Attachment Manager "Open File - Security Warning — Publisher could not be verified"
+1. **Browser-level**: Chrome/Chromium/Edge download warnings (Safe Browsing)
+2. **OS-level**: Windows Attachment Manager "Publisher could not be verified" dialog
 
-Both are disabled via Windows Registry Group Policy — no third-party tools needed, and settings persist across reboots.
+Both are disabled via **Windows Registry Group Policy** — persistent across reboots, effective for both human users and AI browser automation.
 
 ---
 
 ## When to Use
 
-Trigger this skill when the user experiences any of:
+Trigger when user reports:
 
-- Chrome shows "This file may be harmful" when downloading .exe/.msi files
-- Windows pops up "Open File - Security Warning" when launching downloaded installers
-- AI automation tools (Playwright, Puppeteer, MCP Chrome) get stuck on download interception dialogs
-- User wants to permanently disable download safety prompts system-wide
-- User has already set Safe Browsing to "No protection" but still sees download prompts
+- Chrome/Chromium/Edge shows "This file may be harmful" when downloading .exe/.msi/.bat
+- Windows pops "Open File - Security Warning" when launching downloaded installers
+- AI automation tools (Playwright, Puppeteer, MCP Chrome) get stuck on download dialogs
+- User set Safe Browsing to "No protection" but still sees download prompts
+- User wants permanent system-wide download prompt removal
 
 ---
 
 ## How It Works
 
-There are **two independent blocking mechanisms** on Windows:
+### Mechanism 1: Browser Safe Browsing
 
-### Mechanism 1: Browser Safe Browsing / Download Restrictions
+Chrome blocks "dangerous" file types (.exe, .msi, .bat, .dll) even with Safe Browsing set to "No protection" in browser UI. Only **Windows Registry Group Policy** can override this — it has higher priority than browser settings.
 
-Chrome and Chromium-based browsers block or warn about "dangerous" file types. Even with Safe Browsing set to "No protection" in browser settings, Chrome still intercepts certain downloads. The only way to fully disable this is via **Windows Registry Group Policy**, which has higher priority than browser UI settings.
+Each browser brand reads from its own policy path:
+
+| Browser | Policy Path |
+|---------|-------------|
+| Google Chrome | HKCU\SOFTWARE\Policies\Google\Chrome |
+| Chromium / Playwright / Puppeteer / MCP Chrome / Electron | HKCU\SOFTWARE\Policies\Chromium |
+| Microsoft Edge | HKCU\SOFTWARE\Policies\Microsoft\Edge |
+
+> **Critical**: Playwright and Puppeteer use their own bundled Chromium (e.g. %LOCALAPPDATA%\ms-playwright\chromium-xxxx\chrome-win64\chrome.exe). These read from Policies\Chromium, NOT Policies\Google\Chrome. Always configure both.
 
 ### Mechanism 2: Windows Attachment Manager
 
-When a browser downloads a file, Windows attaches a **Zone.Identifier** Alternate Data Stream (ADS) marking it as "from the Internet." When you open the file, Windows checks this marker and shows the "Publisher could not be verified" dialog. Disabling this requires setting SaveZoneInformation=1 to stop the marker from being attached.
+Windows attaches a **Zone.Identifier** Alternate Data Stream (ADS / Mark of the Web) to downloaded files. Launching a file with this marker triggers the "Publisher could not be verified" dialog.
+
+Fix:
+- SaveZoneInformation = 1 → Stop attaching zone markers to new downloads (root cause)
+- LowRiskFileTypes → 30+ extensions treated as safe (covers already-marked files)
 
 ---
 
 ## Implementation
 
-### Step 1: Detect the environment
+### Step 1: Detect Environment
 
-Run ver or echo %OS% to confirm Windows. Check user profile path with echo %USERPROFILE%.
-
-Search for installed Chromium-based browsers:
-```powershell
-dir /s /b "%LOCALAPPDATA%\ms-playwright" 2>nul
-dir /b "C:\Program Files\Google\Chrome\Application\chrome.exe" 2>nul
-dir /b "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" 2>nul
+```
+ver         # Confirm Windows 10/11
+echo %USERPROFILE%
 ```
 
-> **Note**: C:\Program Files paths with spaces may fail with cmd /c. Use PowerShell Test-Path or short names like C:\PROGRA~1 instead.
+### Step 2: Scan for Browsers
 
-### Step 2: Create browser registry policies
+Use PowerShell to find all Chromium-based browsers. Note: paths with spaces may fail in some shells — use short names (C:\PROGRA~1) as fallback.
 
-Create a .reg file and import it silently:
+### Step 3: Apply Browser Policies
 
-```reg
-Windows Registry Editor Version 5.00
+Create browser_policies.reg and import with regedit /s:
 
+```
 [HKEY_CURRENT_USER\SOFTWARE\Policies\Google\Chrome]
 "SafeBrowsingProtectionLevel"=dword:00000000
 "DownloadRestrictions"=dword:00000000
@@ -78,88 +103,35 @@ Windows Registry Editor Version 5.00
 "SafeBrowsingEnabled"=dword:00000000
 "SafeBrowsingProtectionLevel"=dword:00000000
 "DownloadRestrictions"=dword:00000000
-"AllowDeletingBrowserHistory"=dword:00000001
 
 [HKEY_CURRENT_USER\SOFTWARE\Policies\Microsoft\Edge]
 "ConfigureDownloadRestrictions"=dword:00000000
 "SmartScreenEnabled"=dword:00000000
-"SmartScreenPuaEnabled"=dword:00000000
-"PreventSmartScreenPromptOverride"=dword:00000000
 ```
 
-Import with:
-```cmd
-regedit /s browser_policies.reg
-```
+### Step 4: Disable Attachment Manager
 
-**What each path covers:**
+Create attachment_fix.reg with SaveZoneInformation=1 and LowRiskFileTypes covering 30+ extensions. Import with regedit /s.
 
-| Registry Path | Browsers Covered |
-|---|---|
-| Policies\Google\Chrome | Google Chrome (system-installed) |
-| Policies\Chromium | Playwright Chromium, Puppeteer Chromium, MCP Chrome, all Chromium-based automation browsers |
-| Policies\Microsoft\Edge | Microsoft Edge |
+### Step 5: Verify
 
-**Key value meanings:**
-- SafeBrowsingProtectionLevel=0 → No protection (0=disabled, 1=standard, 2=enhanced)
-- DownloadRestrictions=0 → No download restrictions
-- SafeBrowsingEnabled=0 → Safe Browsing completely off
-- SmartScreenEnabled=0 → Microsoft Defender SmartScreen off
+Query all 5 registry paths to confirm values are set.
 
-### Step 3: Disable Windows Attachment Manager
+### Step 6: Clean Up
 
-Create another .reg file:
-
-```reg
-Windows Registry Editor Version 5.00
-
-[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Attachments]
-"SaveZoneInformation"=dword:00000001
-
-[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Associations]
-"LowRiskFileTypes"=".exe;.msi;.bat;.cmd;.ps1;.vbs;.reg;.msu;.msix;.appx;.jar;.com;.scr;.msc;.cpl;.hta;.chm;.tmp;.zip;.rar;.7z;.iso;.dmg;.pkg;.apk;.py;.js;.vbe;.wsf;.wsh"
-```
-
-Import with:
-```cmd
-regedit /s attachment_fix.reg
-```
-
-**What this does:**
-- SaveZoneInformation=1 → Stop attaching "from Internet" zone markers to new downloads (root cause fix)
-- LowRiskFileTypes → List of 30+ file extensions treated as safe; covers existing files that already have zone markers
-
-### Step 4: Verify
-
-Query all registry paths to confirm values are set:
-
-```cmd
-reg query "HKCU\SOFTWARE\Policies\Google\Chrome"
-reg query "HKCU\SOFTWARE\Policies\Chromium"
-reg query "HKCU\SOFTWARE\Policies\Microsoft\Edge"
-reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\Attachments"
-reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\Associations"
-```
-
-> **Important**: When using remote/local system tools, prefer PowerShell Set-ItemProperty over reg add for registry writes, as reg add may silently fail in certain execution environments.
-
-### Step 5: Clean up
-
-Remove temporary .reg and .bat files created during the process.
+Remove temporary .reg and .bat files.
 
 ---
 
-## Caveats & Notes
+## Robustness & Edge Cases
 
-1. **Existing vs. new downloads**: SaveZoneInformation=1 only affects files downloaded AFTER the setting is applied. Files already on disk keep their Zone.Identifier markers — that's why LowRiskFileTypes is also set as a safety net.
-
-2. **AI automation browsers**: Playwright and Puppeteer use their own bundled Chromium (e.g., %LOCALAPPDATA%\ms-playwright\chromium-xxxx\chrome-win64\chrome.exe). These read HKCU\SOFTWARE\Policies\Chromium, not Google\Chrome. Make sure both are configured.
-
-3. **Bookmarks vs. cookies in AI browsers**: When AI tools launch Chrome pointing to your real profile (--user-data-dir), they can read Bookmarks (plain JSON file) but NOT Cookies (SQLite database locked by the running Chrome instance). This is why AI browsers show your bookmarks but require re-login. Close your regular Chrome before using AI browsers if you want cookie sharing.
-
-4. **Headless shell**: Playwright's headless Chromium (chrome-headless-shell.exe) may not implement full policy support. For headless downloads, consider using the headed Chromium instead.
-
-5. **Windows 11**: All registry paths are identical on Windows 11. No changes needed.
+- Path detection failures: Use short 8.3 names (C:\PROGRA~1) when paths with spaces fail
+- Registry write failures: Fall back to PowerShell Set-ItemProperty if reg add fails silently
+- Old vs new downloads: SaveZoneInformation=1 only affects future downloads; LowRiskFileTypes catches existing files
+- AI automation browsers: Always configure both Google\Chrome AND Chromium policy paths
+- Headless shell: chrome-headless-shell.exe may not support policies; prefer headed Chromium
+- Firefox: Not covered; use about:config to set browser.safebrowsing.downloads.enabled to false
+- Enterprise: Add keys under HKLM for system-wide effect
 
 ---
 
@@ -167,8 +139,9 @@ Remove temporary .reg and .bat files created during the process.
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| reg add fails silently | Shell execution environment limitation | Use PowerShell Set-ItemProperty or .reg file import |
-| Policies not taking effect | Chrome/Chromium was already running | Restart the browser completely (check taskbar tray) |
-| Still seeing prompts for old files | Zone.Identifier already attached | LowRiskFileTypes covers them; or manually delete the ADS with streams.exe -d file.exe |
-| Playwright Chromium still blocks | Chromium policy path missing | Verify HKCU\SOFTWARE\Policies\Chromium exists with all values |
-| Short 8.3 names don't resolve | NTFS 8.3 name generation disabled | Use PowerShell Get-ChildItem instead of dir /x |
+| Chrome not found by dir | Spaces in path fail | Short names or PowerShell Test-Path |
+| Policies not taking effect | Browser was running | Close fully, reopen |
+| reg add fails silently | Shell limitation | Use .reg + regedit /s |
+| Old files still prompt | Zone.Identifier exists | LowRiskFileTypes covers; reboot |
+| Playwright still blocks | Only Chrome policy set | Verify Policies\Chromium |
+| Bookmarks visible, logged out | Cookies DB locked | Close Chrome before AI browser |
