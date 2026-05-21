@@ -1,0 +1,5 @@
+*.bat
+*.txt
+b64_*
+encode_*
+verify_*
